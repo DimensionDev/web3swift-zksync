@@ -139,27 +139,28 @@ final public class Oracle {
         default: throw Web3Error.valueError(desc: "Unable to use '\(block)' policy to resolve block number to calculate gas fee suggestion.")
         }
 
-        /// checking if latest block number is greater than number of blocks to take in account
-        /// we're ignoring case when `latestBlockNumber` == `blockCount` since it's unlikely case
-        /// which we could neglect
-        guard latestBlockNumber > blockCount else { return [] }
-
-        // TODO: Make me work with cache
-        let blocks = try await withThrowingTaskGroup(of: Block.self, returning: [Block].self) { group in
-            (latestBlockNumber - blockCount ... latestBlockNumber)
-                .forEach { block in
-                    group.addTask {
-                        let result: Block = try await self.combineRequest(request: .getBlockByNumber(.exact(block), true))
-                        return result
-                    }
+        guard latestBlockNumber >= blockCount else { return [] }
+        
+        let blocks = try await withThrowingTaskGroup(of: Block?.self, returning: [Block].self) { group in
+            (latestBlockNumber - blockCount ... latestBlockNumber).forEach { block in
+                group.addTask {
+                     do {
+                            return try await self.combineRequest(request: .getBlockByNumber(.exact(block), true))
+                        } catch {
+                            print("decode fail:", error)
+                            return nil
+                        }
                 }
-
-            var collected = [Block]()
-
-            for try await value in group {
-                collected.append(value)
             }
-
+        
+            var collected = [Block]()
+        
+            for try await value in group {
+                if let b = value {
+                    collected.append(b)
+                }
+            }
+        
             return collected
         }
 
